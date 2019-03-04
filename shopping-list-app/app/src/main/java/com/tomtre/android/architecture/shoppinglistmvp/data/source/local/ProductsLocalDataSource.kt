@@ -3,25 +3,64 @@ package com.tomtre.android.architecture.shoppinglistmvp.data.source.local
 import com.tomtre.android.architecture.shoppinglistmvp.data.Product
 import com.tomtre.android.architecture.shoppinglistmvp.data.source.ProductDataSource
 import com.tomtre.android.architecture.shoppinglistmvp.util.AppExecutors
+import java.util.function.Function
 
 class ProductsLocalDataSource
-private constructor(val appExecutors: AppExecutors, val productsDao: ProductsDao) : ProductDataSource {
+private constructor(
+    private val appExecutors: AppExecutors,
+    private val productsDao: ProductsDao
+) : ProductDataSource {
 
     companion object {
 
-        @Volatile
+        private val LOCK = Any()
         private var INSTANCE: ProductsLocalDataSource? = null;
 
         fun getInstance(appExecutors: AppExecutors, productsDao: ProductsDao): ProductsLocalDataSource {
-            return INSTANCE ?: synchronized(this) {
-                INSTANCE ?: ProductsLocalDataSource(appExecutors, productsDao)
+            if (INSTANCE == null) {
+                synchronized(LOCK) {
+                    if (INSTANCE == null) {
+                        INSTANCE = ProductsLocalDataSource(appExecutors, productsDao)
+                    }
+                }
             }
+            return INSTANCE!!
         }
 
     }
 
-    override fun getProducts(loadProductListCallback: ProductDataSource.LoadProductListCallback) {
+    override fun getProduct(productId: String, loadProductCallback: ProductDataSource.LoadProductCallback) {
+        val runnable = Runnable {
+            val product: Product? = productsDao.getProductById(productId)
+            executeOnMainThread(
+                Runnable {
+                    if (product == null) {
+                        loadProductCallback.onDataNotAvailable()
+                    } else {
+                        loadProductCallback.onProductLoaded(product)
+                    }
+                }
+            )
+        }
+        executeOnDiskIOThread({})
 
+    }
+
+    override fun getProducts(loadProductListCallback: ProductDataSource.LoadProductListCallback) {
+        val runnable = Runnable {
+            val products = productsDao.getProducts()
+            executeOnMainThread(
+                Runnable {
+                    if (products.isEmpty()) {
+                        loadProductListCallback.onDataNotAvailable()
+                    } else {
+                        loadProductListCallback.onProductsLoaded(products)
+                    }
+
+                }
+            )
+        }
+        executeOnDiskIOThread(runnable)
     }
 
     override fun removeCheckedProducts() {
@@ -30,15 +69,6 @@ private constructor(val appExecutors: AppExecutors, val productsDao: ProductsDao
 
     override fun removeAllProducts() {
         TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
-    }
-
-    override fun getProduct(productId: String, loadProductCallback: ProductDataSource.LoadProductCallback) {
-        Runnable {
-            val product = productsDao.getProductById(productId);
-            executeOnMainThread(
-                if (pro)
-            )
-        }
     }
 
     override fun saveProduct(product: Product) {
@@ -65,12 +95,12 @@ private constructor(val appExecutors: AppExecutors, val productsDao: ProductsDao
         TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
     }
 
-    fun executeOnMainThread(runnable: Runnable) {
-        appExecutors.getMainThreadExecutor().execute(runnable)
+    private fun executeOnMainThread(runnable: Runnable) {
+        appExecutors.mainThreadExecutor.execute(runnable)
     }
 
-    fun executeOnDiskIOThread(runnable: Runnable) {
-        appExecutors.getDiskIOExecutor().execute(runnable)
+    private fun executeOnDiskIOThread(runnable: Runnable) {
+        appExecutors.diskIOExecutor.execute(runnable)
     }
 
 }

@@ -11,7 +11,7 @@ interface ProductsDao {
     fun getProducts(): List<Product>
 
     @Query("SELECT * FROM Products WHERE id = :productId")
-    fun getProductById(productId: String);
+    fun getProductById(productId: String) : Product?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun insertProduct(product: Product)
